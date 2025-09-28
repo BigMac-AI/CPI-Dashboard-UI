@@ -1,14 +1,13 @@
 import React, { useState, useEffect } from "react";
+import Papa from "papaparse";
+
 import CategoryFilter from "./components/CategoryFilter";
 import DateRangePicker from "./components/DateRangePicker";
-import CPIOnlyChart from "./components/CPIOnlyChart";
+import CPIChart from "./components/CPIChart";
 import CategoryChart from "./components/CategoryChart";
 import CPITableCPI from "./components/CPITableCPI";
 import CPITableCategory from "./components/CPITableCategory";
-import KpiCard from "./components/KpiCard";
 
-import cpiData from "./data/parsedCPIData_with_full_predictions.json";
-import sentimentData from "./data/sentimentData.json";
 import { getSentimentDashboardData } from "./utils/getSentimentDashboardData";
 
 import MonthSelector from "./components/sentiment/MonthSelector";
@@ -16,31 +15,77 @@ import SentimentTrendLine from "./components/sentiment/SentimentTrendLine";
 import RatioBarChart from "./components/sentiment/RatioBarChart";
 import KpiSummaryCards from "./components/sentiment/KpiSummaryCards";
 import SentimentDonutChart from "./components/sentiment/SentimentDonutChart";
+import RealTimeAnalysis from "./components/sentiment/RealTimeAnalysis";
+
+
+import ParameterFilter from "./components/ParameterFilter";
+import LassoSentimentFilter from "./components/LassoSentimentFilter";
 
 export default function App() {
-  const [categories, setCategories] = useState([]);
-  const [dateRange, setDateRange] = useState({
-    startDate: "2023-03-01",
-    endDate: "2024-03-01",
-  });
+  const [categories, setCategories] = useState([]); 
+  const [dateRange, setDateRange] = useState({ startDate: "", endDate: "" });
   const [viewMode, setViewMode] = useState("cpi");
-  const [selectedMonth, setSelectedMonth] = useState("2006-01-01");
+  const [selectedMonth, setSelectedMonth] = useState("");
 
-  const selectedData = categories.length > 0 ? cpiData[categories[0]] : [];
+  const [cpiRows, setCpiRows] = useState([]);
+  const [allDates, setAllDates] = useState([]);
+
+  const [params, setParams] = useState({
+    lr: "",
+    epochs: "",
+    ps: "",
+    doParam: "",
+  });
+
+  const [mode, setMode] = useState("");
+
+  const [sentimentData, setSentimentData] = useState([]);
 
   useEffect(() => {
     setCategories([]);
   }, [viewMode]);
 
-  const handleCategoryChange = (newCategories) => {
-    if (viewMode === "category" && newCategories.length <= 1) {
-      setCategories(newCategories);
-    }
+  const handleCategoryChange = (val) => {
+    setCategories(val ? [val] : []);
   };
+
+  useEffect(() => {
+    Papa.parse("/data/cpi_firstday_with_actual.csv", {
+      header: true,
+      download: true,
+      dynamicTyping: true,
+      skipEmptyLines: true,
+      transformHeader: (h) => h.trim(),
+      complete: (result) => {
+        const rows = result.data.filter((r) => r.date);
+
+        console.log("🔥 CSV 헤더:", Object.keys(rows[0] || {}));
+        console.log("🔥 첫 데이터:", rows[0]);
+
+        setCpiRows(rows);
+
+        const dates = Array.from(new Set(rows.map((d) => d.date))).sort();
+        setAllDates(dates);
+
+        if (dates.length > 0 && (!dateRange.startDate || !dateRange.endDate)) {
+          setDateRange({ startDate: dates[0], endDate: dates[dates.length - 1] });
+          setSelectedMonth(dates[0]);
+        }
+        console.log("✅ CSV 로드 완료:", rows.length, "행");
+      },
+    });
+  }, [dateRange.endDate, dateRange.startDate]);
+
+  useEffect(() => {
+    fetch("/data/sentimentData.json")
+      .then((res) => res.json())
+      .then((json) => setSentimentData(json))
+      .catch((err) => console.error("❌ 감성 데이터 로드 실패", err));
+  }, []);
 
   const sentimentDashboard = getSentimentDashboardData(
     sentimentData,
-    cpiData,
+    [],
     selectedMonth
   );
 
@@ -55,8 +100,13 @@ export default function App() {
         minHeight: "100vh",
       }}
     >
-      {/* 상단 버튼 */}
-      <div style={{ textAlign: "right", padding: "0.25rem 0.3rem", backgroundColor: "#f9fafb" }}>
+      <div
+        style={{
+          textAlign: "right",
+          padding: "0.25rem 0.3rem",
+          backgroundColor: "#f9fafb",
+        }}
+      >
         {["cpi", "category", "sentiment"].map((mode) => (
           <button
             key={mode}
@@ -66,18 +116,43 @@ export default function App() {
               backgroundColor: viewMode === mode ? "#3b82f6" : "#e5e7eb",
               color: viewMode === mode ? "#fff" : "#000",
               fontSize: "12px",
-              padding: "0.3rem 3.0rem",
+              padding: "0.3rem 2.0rem",
               border: "none",
               borderRadius: "6px",
               cursor: "pointer",
             }}
           >
-            {mode === "cpi" ? "CPI 전용 차트" : mode === "category" ? "품목별 차트" : "감성 분석"}
+            {mode === "cpi"
+              ? "CPI 전용 차트"
+              : mode === "category"
+              ? "품목별 차트"
+              : "감성 분석"}
           </button>
         ))}
+        <a
+          href="https://10455cd1bb94ce6526.gradio.live"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            display: "inline-block",
+            marginRight: "0.25rem",
+            marginLeft: "0.25rem",
+            backgroundColor: "#e5e7eb",
+            color: "#000",
+            fontSize: "12px",
+            padding: "0.3rem 2.0rem",
+            border: "none",
+            borderRadius: "6px",
+            cursor: "pointer",
+            textDecoration: "none",
+            verticalAlign: "middle",
+            lineHeight: "1.5",
+          }}
+        >
+          챗봇
+        </a>
       </div>
 
-      {/* 📦 본문 + 테이블 전체를 하나로 묶음 */}
       <div
         style={{
           marginTop: "0",
@@ -86,14 +161,12 @@ export default function App() {
           overflow: "hidden",
         }}
       >
-        {/* 본문 영역 */}
         <div
           style={{
             display: "flex",
             height: viewMode === "sentiment" ? "calc(100vh - 48px)" : "auto",
           }}
         >
-          {/* 왼쪽 본문 */}
           <div
             style={{
               flex: 3,
@@ -106,33 +179,43 @@ export default function App() {
           >
             {viewMode === "cpi" && (
               <div style={{ height: "42%" }}>
-                <CPIOnlyChart {...dateRange} />
+                <CPIChart
+                  data={cpiRows}
+                  startDate={dateRange.startDate}
+                  endDate={dateRange.endDate}
+                  {...params}
+                  mode={mode}  
+                />
               </div>
             )}
+
             {viewMode === "category" && (
-              <CategoryChart selectedCategory={categories[0]} {...dateRange} />
+              <div style={{ height: "42%" }}>
+                <CategoryChart categories={categories} {...dateRange} />
+              </div>
             )}
-            {viewMode === "sentiment" && (
+
+            {viewMode === "sentiment" && sentimentDashboard && (
               <>
-                <SentimentTrendLine
-                  months={sentimentDashboard.monthList}
-                  sentiment={sentimentDashboard.sentiment_trend.scores}
-                  cpiActual={sentimentDashboard.cpiActual}
-                  cpiPredicted={sentimentDashboard.cpiPredicted}
-                />
-                <RatioBarChart
-                  months={sentimentDashboard.monthList}
-                  positive={sentimentDashboard.stacked_bar.positive_ratio}
-                  negative={sentimentDashboard.stacked_bar.negative_ratio}
-                  newsCount={sentimentDashboard.stacked_bar.news_count}
-                  N_pos={sentimentDashboard.stacked_bar.N_pos}
-                  N_neg={sentimentDashboard.stacked_bar.N_neg}
-                />
-              </>
+              <div style={{ 
+                flex: 1,
+                minHeight: 0,
+                display: 'flex',
+                flexDirection: 'column'
+              }}>
+                <RealTimeAnalysis />
+              </div>
+              
+              <div style={{
+                height: '1px',
+                backgroundColor: '#000000',
+                width: '100%',
+                flexShrink: 0,
+              }} />
+            </>
             )}
           </div>
 
-          {/* 오른쪽 사이드바 */}
           <div
             style={{
               flex: 1.3,
@@ -143,51 +226,60 @@ export default function App() {
               backgroundColor: "#fff",
             }}
           >
-            {/* (기존 sidebar 코드 그대로 유지) */}
-            {/* DateRangePicker, 예측률, 향후예측 등 */}
             {viewMode === "cpi" && (
               <>
-                <DateRangePicker {...dateRange} onChange={setDateRange} />
-                {/* 예측률 평균 & 향후 예측 */}
-                {/* ... */}
+                <DateRangePicker
+                  {...dateRange}
+                  onChange={setDateRange}
+                  allDates={allDates}
+                />
+                <ParameterFilter data={cpiRows} onChange={setParams} />
+                <LassoSentimentFilter onChange={setMode} /> 
               </>
             )}
+
             {viewMode === "category" && (
-              <CategoryFilter
-                selected={categories}
-                onChange={handleCategoryChange}
-                onReset={() => setCategories([])}
-              />
-            )}
-            {viewMode === "sentiment" && sentimentDashboard.kpi_summary && (
               <>
-                <MonthSelector
-                  selected={selectedMonth}
-                  onChange={setSelectedMonth}
-                  availableMonths={sentimentData.map((d) => d.date.slice(0, 7))}
+                <DateRangePicker
+                  {...dateRange}
+                  onChange={setDateRange}
+                  allDates={allDates}
                 />
-                <KpiSummaryCards {...sentimentDashboard.kpi_summary} />
-                <SentimentDonutChart
-                  N_pos={sentimentDashboard.kpi_summary.N_pos}
-                  N_neg={sentimentDashboard.kpi_summary.N_neg}
+                <CategoryFilter
+                  selected={categories[0] || null}
+                  onChange={handleCategoryChange}
+                  onReset={() => setCategories([])}
                 />
               </>
             )}
+
+            {viewMode === "sentiment" &&
+              sentimentData.length > 0 &&
+              sentimentDashboard.kpi_summary && (
+                <>
+                  <MonthSelector
+                    selected={selectedMonth}
+                    onChange={setSelectedMonth}
+                    availableMonths={sentimentData.map((d) =>
+                      d.date.slice(0, 7)
+                    )}
+                  />
+                  <KpiSummaryCards {...sentimentDashboard.kpi_summary} />
+                  <SentimentDonutChart
+                    N_pos={sentimentDashboard.kpi_summary.N_pos}
+                    N_neg={sentimentDashboard.kpi_summary.N_neg}
+                  />
+                </>
+              )}
           </div>
         </div>
 
-        {/* ✅ 구분선 (위/아래 여백 동일하게) */}
         {viewMode !== "sentiment" && (
           <div
-            style={{
-              height: "1px",
-              backgroundColor: "#e5e7eb",
-              width: "100%",
-            }}
+            style={{ height: "1px", backgroundColor: "#e5e7eb", width: "100%" }}
           />
         )}
 
-        {/* 하단 테이블 */}
         {viewMode !== "sentiment" && (
           <div
             style={{
@@ -198,9 +290,16 @@ export default function App() {
               width: "100%",
             }}
           >
-            {viewMode === "cpi" && <CPITableCPI {...dateRange} />}
+            {viewMode === "cpi" && (
+              <CPITableCPI
+                data={cpiRows}
+                {...dateRange}
+                {...params}
+                mode={mode} 
+              />
+            )}
             {viewMode === "category" && (
-              <CPITableCategory category={categories[0]} {...dateRange} />
+              <CPITableCategory categories={categories} {...dateRange} />
             )}
           </div>
         )}

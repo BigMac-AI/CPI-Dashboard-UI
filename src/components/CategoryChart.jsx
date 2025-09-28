@@ -1,85 +1,121 @@
+import React, { useEffect, useState } from "react";
 import ReactECharts from "echarts-for-react";
-import cpiData from "../data/parsedCPIData_with_full_predictions.json";
+import Papa from "papaparse";
 
-const CategoryChart = ({ selectedCategory, startDate, endDate }) => {
-  const records = selectedCategory ? cpiData[selectedCategory] : [];
+const CATEGORY_LABELS = {
+  "Actual_Food and non-alcoholic beverages": "식료품 및 비알코올 음료",
+  "Actual_Miscellaneous goods and services": "기타 상품 및 서비스",
+  "Actual_Actual rentals for housing": "실제 주거 임대료",
+  "Actual_Maintenance and repair of the dwelling": "주택 유지 및 보수",
+};
 
-  const allDates = records
-    .map((r) => r.날짜)
-    .filter((d) => d >= startDate && d <= endDate);
+const CategoryChart = ({ categories = [], startDate, endDate }) => {
+  const [rows, setRows] = useState([]);
 
-  const actual = allDates.map((date) => {
-    const item = records.find((r) => r.날짜 === date);
-    return item?.값 ?? null;
+  useEffect(() => {
+    Papa.parse("/data/top4_firstday.csv", {
+      header: true,
+      download: true,
+      dynamicTyping: false,
+      skipEmptyLines: true,
+      transformHeader: (h) => h.trim(),
+      complete: (result) => {
+        setRows(result.data);
+      },
+    });
+  }, []);
+
+  const category = categories[0] || null;
+  const actualCol = category;
+  const predictedCol = category
+    ? category.replace("Actual_", "PredictedSent_")
+    : null;
+  const optimalCol = category
+    ? category.replace("Actual_", "PredictedNoSent_")
+    : null;
+
+  const filtered = rows.filter((r) => {
+    const d = new Date(r.Date);
+    if (isNaN(d)) return false;
+    return (
+      (!startDate || !startDate.trim() || d >= new Date(startDate)) &&
+      (!endDate || !endDate.trim() || d <= new Date(endDate))
+    );
   });
 
-  const predicted = allDates.map((date) => {
-    const item = records.find((r) => r.날짜 === date);
-    return item?.예측값 ?? null;
-  });
+  const allDates = filtered.map((r) => r.Date);
 
-  const actualColor = "#3b82f6";
-  const predictedColor = "#ef4444";
+  const getVals = (col) =>
+    filtered.map((r) =>
+      r[col] !== undefined && r[col] !== "" ? Number(r[col]) : null
+    );
+
+  const actual = category ? getVals(actualCol) : [];
+  const predicted = category ? getVals(predictedCol) : [];
+  const optimal = category ? getVals(optimalCol) : [];
 
   const option = {
     tooltip: { trigger: "axis" },
-    legend: { top: 10, left: "center" },
-    grid: { left: 40, right: 20, top: 80, bottom: 60 },
+    legend: {
+      top: 10,
+      left: "center",
+      data: ["실제값", "예측값(감성분석O)", "예측값(감성분석X)"],
+    },
+    grid: { left: 40, right: 20, top: 80, bottom: 40 },
     xAxis: {
       type: "category",
-      data: allDates,
-      axisLabel: { rotate: 45 },
+      data: category ? (allDates.length ? allDates : [""]) : [],
+      axisLabel: {
+        fontSize: 10,
+        rotate: 45,
+        formatter: (value) => (value ? value.slice(0, 7) : ""),
+      },
+      show: !!category,
     },
-    yAxis: { type: "value" },
+    yAxis: { type: "value", scale: true, show: !!category },
+    dataZoom: category
+      ? [
+          {
+            type: "inside",
+            zoomOnMouseWheel: true,
+            moveOnMouseMove: true,
+            moveOnMouseWheel: true,
+          },
+          { type: "inside", orient: "horizontal" },
+        ]
+      : [],
     series: [
       {
-        name: `${selectedCategory || "항목"} (실제)`,
+        name: "실제값",
         type: "line",
-        data: actual,
+        data: category && allDates.length ? actual : [],
         smooth: true,
         symbol: "circle",
-        symbolSize: 6,
-        lineStyle: { width: 2 },
-        itemStyle: { color: actualColor },
+        symbolSize: 4,
+        lineStyle: { width: 2, color: "#2563eb" },
+        itemStyle: { color: "#2563eb" },
       },
       {
-        name: `${selectedCategory || "항목"} (예측)`,
+        name: "예측값(감성분석O)",
         type: "line",
-        data: predicted,
+        data: category && allDates.length ? predicted : [],
         smooth: true,
-        symbol: "none",
-        lineStyle: {
-          type: "dashed",
-          width: 2,
-          color: predictedColor,
-        },
-        itemStyle: {
-          color: predictedColor,
-        },
+        symbol: "circle",
+        symbolSize: 4,
+        lineStyle: { width: 2, color: "#ef4444" },
+        itemStyle: { color: "#ef4444" },
+      },
+      {
+        name: "예측값(감성분석X)",
+        type: "line",
+        data: category && allDates.length ? optimal : [],
+        smooth: true,
+        symbol: "circle",
+        symbolSize: 4,
+        lineStyle: { width: 2, color: "#10b981" },
+        itemStyle: { color: "#10b981" },
       },
     ],
-  };
-
-  const fallbackOption = {
-    title: {
-      text: "항목을 선택해주세요",
-      left: "center",
-      top: "middle",
-      textStyle: {
-        fontSize: 14,
-        color: "#9ca3af",
-      },
-    },
-    xAxis: {
-      type: "category",
-      data: [],
-      axisLine: { lineStyle: { color: "#d1d5db" } },
-    },
-    yAxis: {
-      type: "value",
-      axisLine: { lineStyle: { color: "#d1d5db" } },
-    },
-    series: [],
   };
 
   return (
@@ -99,23 +135,20 @@ const CategoryChart = ({ selectedCategory, startDate, endDate }) => {
     >
       <h3
         style={{
-          fontSize: "18px",
+          fontSize: "15px",
           fontWeight: "600",
-          marginBottom: "16px",
+          marginBottom: "10px",
           color: "#111827",
           textAlign: "center",
         }}
       >
-        {selectedCategory || "품목"} 추세 차트
+        {category ? CATEGORY_LABELS[category] || category : "품목별 추세 차트"}
       </h3>
 
       <ReactECharts
-        key={selectedCategory || "empty"}
-        option={
-          selectedCategory ? option : fallbackOption
-        }
+        option={option}
         notMerge={true}
-        style={{ width: "100%", height: 280 }}
+        style={{ width: "100%", height: 320 }}
       />
     </div>
   );

@@ -19,14 +19,14 @@ const RatioBarChart = ({ months, positive, negative, newsCount, N_pos, N_neg }) 
       left: 40,
       right: 20,
       top: 60,
-      bottom: 60  // ✅ 라벨 짤림 방지
+      bottom: 60
     },
     xAxis: {
       type: "category",
       data: months,
       axisLabel: {
-        rotate: 45,  // ✅ 겹침 방지
-        margin: 12   // ✅ 라벨 간격 확보
+        rotate: 45,
+        margin: 12
       }
     },
     yAxis: {

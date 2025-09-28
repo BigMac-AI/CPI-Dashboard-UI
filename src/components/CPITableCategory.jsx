@@ -1,49 +1,80 @@
-import React from "react";
-import cpiData from "../data/parsedCPIData_with_full_predictions.json";
+import React, { useEffect, useState } from "react";
+import Papa from "papaparse";
 
-const CPITableCategory = ({ category, startDate, endDate }) => {
-  // 날짜 범위만 기준으로 헤더를 항상 생성
-  const referenceCategory = Object.keys(cpiData)[0];
-  const dates = cpiData[referenceCategory]
-    .filter((d) => d.날짜 >= startDate && d.날짜 <= endDate)
-    .map((d) => d.날짜);
+const CATEGORY_LABELS = {
+  "Actual_Food and non-alcoholic beverages": "식료품 및 비알코올 음료",
+  "Actual_Miscellaneous goods and services": "기타 상품 및 서비스",
+  "Actual_Actual rentals for housing": "실제 주거 임대료",
+  "Actual_Maintenance and repair of the dwelling": "주택 유지 및 보수",
+};
 
-  // 초기값은 모두 "-"
-  let actualRow = dates.map(() => "-");
-  let predictedRow = dates.map(() => "-");
-  let rateRow = dates.map(() => "-");
+const CPITableCategory = ({ categories = [], startDate, endDate }) => {
+  const [rows, setRows] = useState([]);
 
-  // category가 있을 경우 실제 데이터로 채움
-  if (category && cpiData[category]) {
-    const records = cpiData[category].filter(
-      (r) => r.날짜 >= startDate && r.날짜 <= endDate
-    );
-
-    const getRecordByDate = (date) => records.find((r) => r.날짜 === date);
-
-    actualRow = dates.map((date) => {
-      const r = getRecordByDate(date);
-      return r?.값 !== undefined ? r.값.toFixed(2) : "-";
+  useEffect(() => {
+    Papa.parse("/data/top4_firstday.csv", {
+      header: true,
+      download: true,
+      dynamicTyping: false,
+      skipEmptyLines: true,
+      transformHeader: (h) => h.trim(),
+      complete: (result) => {
+        setRows(result.data);
+      },
     });
+  }, []);
 
-    predictedRow = dates.map((date) => {
-      const r = getRecordByDate(date);
-      return r?.예측값 !== undefined ? r.예측값.toFixed(2) : "-";
-    });
-
-    rateRow = dates.map((date) => {
-      const r = getRecordByDate(date);
-      if (
-        typeof r?.값 === "number" &&
-        typeof r?.예측값 === "number" &&
-        r.값 !== 0
-      ) {
-        const rate = ((r.예측값 - r.값) / r.값) * 100;
-        return `${rate.toFixed(1)}%`;
-      }
-      return "-";
-    });
+  if (!rows.length) {
+    return <div style={{ padding: 16 }}>Loading category data...</div>;
   }
+
+  const filteredDates = Array.from(new Set(rows.map((r) => r.Date)))
+    .filter(
+      (d) =>
+        (!startDate || d >= startDate) &&
+        (!endDate || d <= endDate)
+    )
+    .sort();
+
+  const defaultCols = 12; 
+  const fallbackDates = Array(defaultCols).fill("-");
+
+  const buildRow = (cat, type) => {
+    return filteredDates.map((date) => {
+      const record = rows.find((r) => r.Date === date);
+      if (!record) return "-";
+
+      const col =
+        type === "actual"
+          ? cat
+          : type === "predictedO"
+          ? cat.replace("Actual_", "PredictedSent_")
+          : cat.replace("Actual_", "PredictedNoSent_");
+
+      return record?.[col] !== undefined && record?.[col] !== ""
+        ? Number(record[col]).toFixed(2)
+        : "-";
+    });
+  };
+
+  let korName = "선택된 품목";
+  let actualRow = [];
+  let predictedRow = [];
+  let optimalRow = [];
+
+  if (categories.length) {
+    const category = categories[0];
+    korName = CATEGORY_LABELS[category] || category;
+    actualRow = buildRow(category, "actual");
+    predictedRow = buildRow(category, "predictedO");
+    optimalRow = buildRow(category, "predictedX");
+  } else {
+    actualRow = Array(defaultCols).fill("-");
+    predictedRow = Array(defaultCols).fill("-");
+    optimalRow = Array(defaultCols).fill("-");
+  }
+
+  const datesToRender = categories.length ? filteredDates : fallbackDates;
 
   return (
     <div
@@ -55,53 +86,66 @@ const CPITableCategory = ({ category, startDate, endDate }) => {
       }}
     >
       <h3 style={{ fontWeight: 700, fontSize: "16px", marginBottom: "12px" }}>
-        {category || "📌 항목을 선택해주세요"}
+        {korName} 상세 수치
       </h3>
       <div style={{ overflowX: "auto", width: "100%" }}>
-        <table
-          style={{
-            tableLayout: "fixed",
-            borderCollapse: "collapse",
-            minWidth: `${dates.length * 140 + 150}px`,
-            fontSize: "12px",
-          }}
-        >
-          <thead>
-            <tr style={{ backgroundColor: "#f1f5f9" }}>
-              <th
-                style={{
-                  width: "150px",
-                  padding: "4px 6px",
-                  textAlign: "left",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                항목 / 날짜
-              </th>
-              {dates.map((d) => (
+        <div style={{ maxHeight: "125px", overflowY: "auto" }}>
+          <table
+            style={{
+              tableLayout: "fixed",
+              borderCollapse: "collapse",
+              minWidth: `${datesToRender.length * 140 + 150}px`,
+              fontSize: "12px",
+            }}
+          >
+            <thead>
+              <tr style={{ backgroundColor: "#f1f5f9" }}>
                 <th
-                  key={d}
                   style={{
-                    width: "140px",
+                    position: "sticky",
+                    top: 0,
+                    background: "#f1f5f9",
+                    zIndex: 2,
+                    width: "150px",
                     padding: "4px 6px",
-                    textAlign: "center",
+                    textAlign: "left",
                     whiteSpace: "nowrap",
                   }}
                 >
-                  {d}
+                  항목 / 날짜
                 </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {[["실제값", actualRow], ["예측값", predictedRow], ["예측률", rateRow]].map(
-              ([label, row]) => (
+                {datesToRender.map((d, i) => (
+                  <th
+                    key={i}
+                    style={{
+                      position: "sticky",
+                      top: 0,
+                      background: "#f1f5f9",
+                      zIndex: 1,
+                      width: "140px",
+                      padding: "4px 6px",
+                      textAlign: "center",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {d}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                ["실제값", actualRow],
+                ["예측값(감성분석O)", predictedRow],
+                ["예측값(감성분석X)", optimalRow],
+              ].map(([label, row]) => (
                 <tr key={label}>
                   <td
                     style={{
                       padding: "4px 6px",
                       fontWeight: 500,
                       whiteSpace: "nowrap",
+                      color: "#374151",
                     }}
                   >
                     {label}
@@ -113,16 +157,17 @@ const CPITableCategory = ({ category, startDate, endDate }) => {
                         padding: "4px 6px",
                         textAlign: "center",
                         whiteSpace: "nowrap",
+                        color: "#111827",
                       }}
                     >
                       {v}
                     </td>
                   ))}
                 </tr>
-              )
-            )}
-          </tbody>
-        </table>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

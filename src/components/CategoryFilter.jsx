@@ -1,153 +1,104 @@
-import { useState } from "react";
-import cpiData from "../data/parsedCPIData_with_full_predictions.json";
+import { useState, useEffect } from "react";
+import Papa from "papaparse";
+
+const CATEGORY_LABELS = {
+  "Actual_Food and non-alcoholic beverages": "식료품 및 비알코올 음료",
+  "Actual_Miscellaneous goods and services": "기타 상품 및 서비스",
+  "Actual_Actual rentals for housing": "실제 주거 임대료",
+  "Actual_Maintenance and repair of the dwelling": "주택 유지 및 보수",
+};
 
 const CategoryFilter = ({ selected, onChange, onReset }) => {
-  // ✅ "CPI" 항목 제거
-  const allCategories = Object.keys(cpiData).filter((cat) => cat !== "CPI"); // ★
-  const [search, setSearch] = useState("");
+  const [allCategories, setAllCategories] = useState([]);
 
-  const toggleCategory = (category) => {
-    if (selected.includes(category)) {
-      onChange(selected.filter((c) => c !== category));
+  useEffect(() => {
+    Papa.parse("/data/top4_firstday.csv", {
+      download: true,
+      preview: 1,
+      header: true,
+      complete: (result) => {
+        if (!result.meta || !result.meta.fields) return;
+
+        console.log("📌 CSV 헤더:", result.meta.fields);
+
+        const actualCols = result.meta.fields.filter((f) =>
+          f.startsWith("Actual_")
+        );
+
+        setAllCategories(actualCols);
+        console.log("📌 사용 가능한 변수 목록:", actualCols);
+      },
+    });
+  }, []);
+
+  const selectCategory = (category) => {
+    if (selected === category) {
+      onChange(null);
     } else {
-      onChange([...selected, category]);
+      onChange(category);
     }
   };
 
-  const filteredCategories = allCategories.filter((cat) =>
-    cat.toLowerCase().includes(search.toLowerCase())
-  );
-
   return (
-    <div style={{
-      border: "1px solid #d1d5db",
-      borderRadius: "12px",
-      padding: "1rem",
-      backgroundColor: "#ffffff",
-      maxHeight: "415px",
-      minHeight: "280px",
-      fontSize: "14px",
-      display: "flex",
-      flexDirection: "column",
-      boxSizing: "border-box",
-      width: "100%",
-      maxWidth: "100%",
-      overflow: "auto",
-      flex: 1,               // ✅ 부모 높이만큼 차지
-      height: "100%",
-    }}>
-      {/* 항목 슬라이서 + 검색창 */}
-      <div style={{
-        display: "flex",
-        alignItems: "center",
-        gap: "0.5rem",
-        marginBottom: "0.75rem",
-        flexWrap: "nowrap",
-        width: "100%",
-      }}>
-        <div style={{
-          fontWeight: "600",
-          color: "#374151",
-          whiteSpace: "nowrap",
-          flexShrink: 0,
-        }}>
-          항목 슬라이서
-        </div>
-
-        <div style={{ flex: 1, position: "relative", maxWidth: "100%" }}>
-          <input
-            type="text"
-            placeholder="항목을 검색하세요"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            style={{
-              width: "100%",
-              maxWidth: "100%",
-              minWidth: "0",
-              boxSizing: "border-box",
-              border: "1px solid #d1d5db",
-              borderRadius: "6px",
-              padding: "8px 12px",
-              paddingLeft: "32px",
-              fontSize: "13px",
-              outline: "none",
-              backgroundColor: "#f9fafb",
-              transition: "all 0.2s ease",
-            }}
-          />
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 24 24"
-            style={{
-              position: "absolute",
-              left: "10px",
-              top: "50%",
-              transform: "translateY(-50%)",
-              width: "18px",
-              height: "18px",
-              color: "#9ca3af",
-            }}
-          >
-            <path
-              fill="currentColor"
-              d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 0 0 1.48-5.34c-.47-2.78-2.79-5-5.59-5.34a6.505 6.505 0 0 0-7.27 7.27c.34 2.8 2.56 5.12 5.34 5.59a6.5 6.5 0 0 0 5.34-1.48l.27.28v.79l4.25 4.25c.41.41 1.08.41 1.49 0 .41-.41.41-1.08 0-1.49L15.5 14zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"
-            />
-          </svg>
-          {search && (
-            <button
-              onClick={() => setSearch("")}
-              style={{
-                position: "absolute",
-                right: "10px",
-                top: "50%",
-                transform: "translateY(-50%)",
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                color: "#9ca3af",
-                padding: "0",
-              }}
-            >
-              ✕
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* 항목 목록 */}
-      <div style={{
-        flex: 1,
-        overflowY: "auto",
+    <div
+      style={{
+        border: "1px solid #d1d5db",
+        borderRadius: "12px",
+        padding: "1rem",
+        backgroundColor: "#ffffff",
+        fontSize: "14px",
         display: "flex",
         flexDirection: "column",
-        gap: "0.5rem",
-        paddingRight: "4px",
-      }}>
-        {filteredCategories.map((cat) => (
-          <label key={cat} style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "0.5rem",
-            color: "#111827",
-            cursor: "pointer",
-          }}>
+        width: "100%",
+        boxSizing: "border-box",
+        gap: "0.95rem",
+      }}
+    >
+      <div
+        style={{
+          fontWeight: "600",
+          color: "#374151",
+          marginBottom: "0.75rem",
+        }}
+      >
+        변수 선택
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: "1rem",
+        }}
+      >
+        {allCategories.map((cat) => (
+          <label
+            key={cat}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              color: "#111827",
+              cursor: "pointer",
+            }}
+          >
             <input
-              type="checkbox"
-              checked={selected.includes(cat)}
-              onChange={() => toggleCategory(cat)}
+              type="radio"
+              name="category"
+              checked={selected === cat}
+              onChange={() => selectCategory(cat)}
               style={{ accentColor: "#000000", width: "14px", height: "14px" }}
             />
-            {cat}
+            {CATEGORY_LABELS[cat] || cat}
           </label>
         ))}
-        {filteredCategories.length === 0 && (
+        {!allCategories.length && (
           <div style={{ fontSize: "13px", color: "#9ca3af" }}>
-            일치하는 항목이 없습니다.
+            불러올 항목이 없습니다.
           </div>
         )}
       </div>
 
-      {/* 초기화 버튼 */}
       <button
         onClick={onReset}
         style={{

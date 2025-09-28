@@ -1,13 +1,10 @@
 import ReactECharts from "echarts-for-react";
 
 const SentimentTrendLine = ({ months, sentiment, cpiActual, cpiPredicted }) => {
-  // 감성 점수 범위 계산
   const minSent = Math.min(...sentiment);
   const maxSent = Math.max(...sentiment);
   const sentimentMin = Math.floor(minSent * 10) / 10 - 0.05;
   const sentimentMax = Math.ceil(maxSent * 10) / 10 + 0.05;
-
-  // CPI 범위 계산
   const allCpi = [...cpiActual, ...cpiPredicted].filter((v) => typeof v === "number");
   const minCpi = Math.floor(Math.min(...allCpi));
   const maxCpi = Math.ceil(Math.max(...allCpi));
